@@ -100,8 +100,9 @@ namespace servic
                                         size_t header_size = header.find("\r\n\r\n")+4;
                                         if (content_length > 0 && header.size() < header_size + content_length)
                                         {
+                                            size_t body_size = content_length - (header.size() - header_size);
                                             asio::streambuf body(self->max_buf);
-                                            co_await asio::async_read(self->socket,body, asio::transfer_exactly(content_length), asio::use_awaitable);
+                                            co_await asio::async_read(self->socket,body, asio::transfer_exactly(body_size), asio::use_awaitable);
                                             header.append(asio::buffers_begin(body.data()),asio::buffers_end(body.data()));
                                         }
                                         auto locked_node = ptr.lock();

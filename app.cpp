@@ -23,6 +23,14 @@ int main()
             output = "HTTP/1.1 200 OK\r\n\r\n Test.";
             return 0; });
 
+        // 流式路由 — 分块写入
+        ros.on_stream("/stream", [](std::string &req, rt::WriteCallback write, const std::map<std::string, std::string> &params)
+               {
+            write("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n");
+            write("chunk1\n");
+            write("chunk2\n");
+            write("chunk3"); });
+
         server.run(ros);
     }
     catch (std::exception &e)

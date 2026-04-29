@@ -89,6 +89,38 @@ namespace servic
                                     std::cout << "New connection from: "
                                             << self->socket.remote_endpoint().address().to_string()
                                             << ":" << self->socket.remote_endpoint().port() <<" on: " << url << std::endl;
+
+                                    // 检查是否为流式路由
+                                    if (ros.has_stream_handler(url))
+                                    {
+                                        auto handler = ros.get_stream_handler(url);
+                                        if (handler)
+                                        {
+                                            size_t content_length = get_content_length(header);
+                                            size_t header_size = header.find("\r\n\r\n") + 4;
+                                            if (content_length > 0 && header.size() < header_size + content_length)
+                                            {
+                                                size_t body_size = content_length - (header.size() - header_size);
+                                                asio::streambuf body(self->max_buf);
+                                                co_await asio::async_read(self->socket, body, asio::transfer_exactly(body_size), asio::use_awaitable);
+                                                header.append(asio::buffers_begin(body.data()), asio::buffers_end(body.data()));
+                                            }
+                                            // 创建写回调，绑定到当前 socket
+                                            auto write_cb = [self](const std::string &chunk)
+                                            {
+                                                try
+                                                {
+                                                    asio::write(self->socket, asio::buffer(chunk));
+                                                }
+                                                catch (...) {}
+                                            };
+                                            std::map<std::string, std::string> empty_params;
+                                            handler(header, write_cb, empty_params);
+                                            self->socket.close();
+                                            co_return;
+                                        }
+                                    }
+
                                     std::string buf;
                                     auto [ptr,params] = ros.get(url);
                                     if (ptr.expired())
@@ -106,7 +138,7 @@ namespace servic
                                             header.append(asio::buffers_begin(body.data()),asio::buffers_end(body.data()));
                                         }
                                         auto locked_node = ptr.lock();
-                                        if (!locked_node) { 
+                                        if (!locked_node) {
                                             buf = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
                                         } else {
                                             int err = locked_node->func(header, buf,params);
